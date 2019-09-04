@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 100%; margin: 0; padding: 0 }
+ 	  
+ 	  #dashboard-wrapper {height: 100%}
+
+      /* left-slider {height:100%;left:-300px;width:300px;position:relative;} */
+      #left-slider {height:100%;position:absolute;left:-400px;width:400px;z-index:1;background-color:#FFFFFF;}
+         #org-breakout {height:15%;width:100%;z-index:1}
+         #org-wrapper {height:85%;width:100%;background-color:#999999;z-index:1}
+
+	   #controls-wrapper {position:absolute;top:10px;height:50px;width:500px;z-index:17}
+       /*#map-canvas { height: 100%;width:100%;position:relative; left:0px;}*/
+       #map-canvas { height: 100%;z-index:0;}
+       #graph-canvas { height: 220px; position:absolute;bottom:15px; left:20px;width:800px;z-index:1 }
+            #district-name {position:relative;top:0px; left:40px; height:35px; width:585px;background-color:#FFFFFF;}
+            #graph1 {position:absolute;height:160px; left:40px; top:40px;width:200px;}
+            #graph2 {position:absolute;height:160px; top:40px; left:250px;width:200px;}
+            #graph3 {position:absolute;height:160px; top:40px; left:455px;width:170px;}
+            
+    </style>
+
+    <script type="text/javascript" src="http://www.google.com/jsapi"></script>
+    <!-- <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script> -->
+     <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=REPLACEWITHKEY5&sensor=true"></script>
+    <script type="text/javascript" src="http://maps.stamen.com/js/tile.stamen.js?v1.2.3"></script>
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>      
+
+    <script type="text/javascript">
+    
+    //declare globals
+    var mouseOverCounter = 0;
+    var polyHolder;
+    var chartOneHolder;
+    var wrapper;
+    var wrapperTwo;
+    var globalView;
+    var eventArgPass;
+    var wrapperOrg;
+    var globalViewOrg;
+    var globalAreaDistrict = .1;
+    var globalIncomeDistrict = 1000;
+    var globalRadiusRatio = 1;
+    var globalZoomControl = 0;
+    var globalZoomLevel = 10;
+    var globalDistrictName = '';
+    var graphColorArray =[];
+    var polyArray = [];
+    var globalSetting = 0;
+    var killPoly;
+    var killEm = 0;
+    var theMarker;
+    var savedDistrictZoom = 9;
+
+    google.load('visualization', '1.1', { packages: ['corechart','controls'] });
+
+    function initialize() {
+                  
+        //Build Map ----------------------------------------------------------    
+        var layertwo = "toner-background";  //var layertwo = "toner-hybrid";  
+        var mapOptions = {
+            center: new google.maps.LatLng(42.24, -71.8),
+            zoom: 9,
+            //mapTypeId: google.maps.MapTypeId.SATELLITE  //SATELLITE  //ROADMAP
+            mapTypeId: layertwo
+        };
+        map = new google.maps.Map(document.getElementById("map-canvas"), mapOptions);
+        map.mapTypes.set(layertwo, new google.maps.StamenMapType(layertwo));
+
+        //Build byOrg Fusion Table layer -----------------------------------------
+        var selectField = 'poly';
+        var tableId =  '' //replace with byOrg key ; 
+        layer = new google.maps.FusionTablesLayer({heatmap:{enabled:false}});
+        var params_pass = "ini"
+        setQueryParams(selectField, tableId, params_pass);
+        layer.setMap(map);
+
+        //Build Districts Polygons -----------------------------------------------
+        
+        var script = document.createElement('script');
+        var url = ['https://www.googleapis.com/fusiontables/v1/query?'];
+        url.push('sql=');
+        var query = 'SELECT MaxLong, poly, name, senateId, incomeShared, numOrgs, LatCenter, LongCenter, LatLength, LongLength, POPULATION FROM ' +             
+        
+        '' + //replace with districtPolygons key
+        //' WHERE tblname=3 ' +
+        ' ORDER BY senateId ASC '; 
+        var encodedQuery = encodeURIComponent(query);
+        url.push(encodedQuery);
+        url.push('&callback=drawPoly');
+        url.push('&key='); //replace with key4
+        script.src = url.join('');
+        var body = document.getElementsByTagName('body')[0];
+        body.appendChild(script);
+
+        //this calls back drawPoly - districts poly: create, invoke ; districts-graph-data: build
+        //which then calls drawVisualization - build graphs
+
+        google.maps.event.addListener(map, 'zoom_changed', function() {
+            if (map.getZoom() > 17) { 
+                //alert("hey");
+                map.setTilt(45); //map.setHeading(90);
+                }
+            });
+        
+        google.maps.event.addDomListener(document.getElementById('zoomout'),'click', function() {
+            zoomOutRoutine();
+         });
+
+    }  // end func intitialize ----------------------------------------------------------------------------------------------------
+
+    function zoomOutRoutine() {
+
+        if (globalSetting == 1) {
+            //go back to full MA view
+            
+            
+            google.maps.event.trigger(killPoly,'click');
+            killPoly.setMap(null);
+            killPoly = null;
+
+            globalZoomControl = 0;
+            map.setZoom(9);
+            slideAction(false);
+            globalZoomControl = 1;
+
+            polyHolder.setOptions({visible:true});
+            polyHolder = null;
+            polyArray =[];
+
+
+            globalSetting = 0;
+        }
+
+        if (globalSetting == 2) {
+            //go back to district view
+
+            theMarker.setMap(null);
+            theMarker=null;
+
+            var waitTime = 600;
+            if ( (map.getZoom() > 18) && (savedDistrictZoom < 18 )) { setTimeout( function() {map.setZoom(18); }, waitTime); waitTime += 500;}
+            if ( (map.getZoom() > 17) && (savedDistrictZoom < 17 )) { setTimeout( function() {map.setZoom(17); }, waitTime); waitTime += 500;}
+            if ( (map.getZoom() > 16) && (savedDistrictZoom < 16 )) { setTimeout( function() {map.setZoom(16); }, waitTime); waitTime += 500;}
+            if ( (map.getZoom() > 15) && (savedDistrictZoom < 15 )) { setTimeout( function() {map.setZoom(15); }, waitTime); waitTime += 500;}
+            if ( (map.getZoom() > 14) && (savedDistrictZoom < 14 )) { setTimeout( function() {map.setZoom(14); }, waitTime); waitTime += 500;}
+            if ( (map.getZoom() > 13) && (savedDistrictZoom < 13 )) { setTimeout( function() {map.setZoom(13); }, waitTime); waitTime += 500;}
+            if ( (map.getZoom() > 12) && (savedDistrictZoom < 12 )) { setTimeout( function() {map.setZoom(12); }, waitTime); waitTime += 500;}
+            if ( (map.getZoom() > 11) && (savedDistrictZoom < 11 )) { setTimeout( function() {map.setZoom(11); }, waitTime); waitTime += 500;}
+            if ( (map.getZoom() > 10) && (savedDistrictZoom < 10 )) { setTimeout( function() {map.setZoom(10); }, waitTime); waitTime += 500;}
+
+            setTimeout( function() { globalZoomLevel = map.getZoom();}, waitTime + 500 );
+            
+            //map.setOptions({mapTypeId:google.maps.MapTypeId.SATELLITE});
+            var layertwo = "toner-background";  //var layertwo = "toner-hybrid";  
+        /*
+        var mapOptions = {
+            center: new google.maps.LatLng(42.24, -71.8),
+            zoom: 9,
+            //mapTypeId: google.maps.MapTypeId.SATELLITE  //SATELLITE  //ROADMAP
+            mapTypeId: layertwo
+        }; */
+        //map = new google.maps.Map(document.getElementById("map-canvas"), mapOptions);
+        map.mapTypes.set(layertwo, new google.maps.StamenMapType(layertwo));
+
+
+            globalSetting = 1;
+        }
+    }
+
+    function drawVisualization(incomingData) {
+
+        globalView = new google.visualization.DataView(incomingData);
+        
+        var rowHolder = [];
+        rowHolder=[40,40];
+        globalView.setRows(rowHolder);
+       
+        wrapper.setDataTable(incomingData);
+        globalView.setColumns([0,2]);
+        wrapper.setView(globalView.toJSON());
+        wrapper.draw();
+        
+        wrapperTwo.setDataTable(incomingData);
+        globalView.setColumns([0,1]);
+        wrapperTwo.setView(globalView.toJSON());
+        wrapperTwo.draw();
+
+        wrapperThree.setDataTable(incomingData);
+        globalView.setColumns([0,3]);
+        wrapperThree.setView(globalView.toJSON());
+        wrapperThree.draw();
+    } 
+
+    function reappearPoly() {
+        //polyHolder.setOptions({visible:true,fillColor:'#444444'});
+        polyHolder.setOptions({visible:true});
+    }
+
+    function drawPoly(data) {
+          
+        var myDataTable = new google.visualization.DataTable();
+        myDataTable.addColumn('string','name');
+        myDataTable.addColumn('number','incomeShared');  
+        myDataTable.addColumn('number','numOrgs');  
+        myDataTable.addColumn('number','population');  
+
+        wrapper = new google.visualization.ChartWrapper({
+        containerId: 'graph1',
+        chartType:  'BarChart',        //'ColumnChart'
+        options:{legend:'none',
+                 animation:{easing:'in',duration:200},
+                 title:"Number of Org's in District",
+                 hAxis: {logScale:false,
+                        viewWindow:{max:1400,min:300},
+                        textPosition:'out',
+                        slantedText: true,
+                        //gridlines:{count:4}
+                        textStyle:{fontSize:10},
+                        ticks: [{v:500, f:"500"},{v:800, f:"800"},{v:1100,f:"1,100"},{v:1400,f:"1,400+"}]
+                        },
+                        chartArea: {left:50},
+                        vAxis: {ticks:[{f:"MA avg"},{f:"District"}]}
+                }
+        });
+
+        wrapperTwo = new google.visualization.ChartWrapper({
+        containerId: 'graph2',
+        chartType:  'BarChart',        //'ColumnChart'
+        options:{legend:'none',
+                 title:"Total Non-Profit Funding in District",
+                 hAxis: {logScale:true,
+                        viewWindow:{min:353577981,max:60090673811},
+                        textPosition:'out',
+                        textStyle:{fontSize:10},
+                        slantedText:true,
+                        //gridlines:{count:6}
+                        ticks: [{v:500000000, f:"$500M"},{v:2000000000, f:"$2B"},{v:8000000000,f:"$8B"},{v:60000000000,f:"$60B+"}]
+                        },
+                vAxis: {textPosition:'none'},
+                chartArea: {left:10, width: "95%"}
+                }
+        });
+
+        wrapperThree = new google.visualization.ChartWrapper({
+        containerId: 'graph3',
+        chartType:  'BarChart',        //'ColumnChart'
+        options:{legend:'none',
+                 title:"Log-Income per Org in District",
+                 hAxis: {logScale:false,
+                        viewWindow:{min:.8,max:5.2},
+                        textPosition:'out',
+                        gridlines:{count:4},
+                        textStyle:{fontSize:10},
+                        slantedText:true
+                        },
+                vAxis: {textPosition:'none'},
+                chartArea: {left:20, width: "90%"}
+                }
+        });
+        
+        var rows = data['rows'];
+        for (var i in rows) {   // loop proc -------------------------------------
+                var newCoordinates = [];
+                var geometries = rows[i][1]['geometries'];             
+                if (geometries) {
+                    for (var j in geometries) {
+                        newCoordinates.push(constructNewCoordinates(geometries[j])); 
+                    }
+                } else {
+                    newCoordinates = constructNewCoordinates(rows[i][1]['geometry']); 
+                }
+                
+                //Pre-Proc data fields for Polygon's attributes
+
+               //build local vars
+               //var query = 'SELECT MaxLong, poly, name, senateId, incomeShared, numOrgs, LatCenter, LongCenter, LatLength, longLength FROM ' +      
+                var nameIn = rows[i][2];
+                var senateId = Number(rows[i][3]);
+                var incomeShared = Number(rows[i][4]);
+                var numOrgs = Number(rows[i][5]);
+                var latCenter = Number(rows[i][6]);
+                var longCenter = Number(rows[i][7]);
+                var latLength = Number(rows[i][8]);
+                var longLength =  Number(rows[i][9]);
+                var population = Number(rows[i][10]);
+                var incomePerOrg = Number( 100 * ( Math.log(incomeShared) / numOrgs ) );
+
+                //Build DataTable for graphs ------------------------------
+                myDataTable.addRow([nameIn,Number(incomeShared),Number(numOrgs),Number(incomePerOrg)]);
+
+
+                //Color & Styling -----------------------------
+                var colorArray = [];
+                //colorArray= ["#444444","#666666","#999999"];
+                colorArray= ["#9fc5e8","#3d85c6","#073763"];
+
+                var colorTier = 0;
+                if(incomeShared > 1318815734) colorTier = 1;
+                if(incomeShared > 16066464721) colorTier = 2;
+                
+                //Construct Object ---------------------------------
+                var country = new google.maps.Polygon({
+                    paths: newCoordinates,
+                    //strokeColor: colors[randomnumber],
+                      strokeOpacity: 1,
+                    //strokeOpacity: 0,
+                    // strokeWeight: 1,
+                    fillColor:  colorArray[colorTier], 
+                    fillOpacity: .87,
+                    zIndex:9999,
+                    clickable:true,
+                    visible:true,
+                    //editable:true
+                });  
+    
+                //Polygon event listeners -------------------------------
+
+                google.maps.event.addListener(country, 'click',
+                (function (senateId,latCenter,longCenter, latLength, longLength,incomeShared, nameIn) {
+                    return function() {
+                        
+                        var areaDistrict = latLength * longLength;
+                        globalAreaDistrict = areaDistrict;
+                        globalIncomeDistrict = incomeShared;
+                        populateDistrict(senateId,areaDistrict);
+                        globalDistrictName = nameIn;
+                        
+                        this.setOptions({ visible:false });
+                        polyHolder = this;
+
+                        var longOffset = (longLength * .15);
+                        //setTimeout( function() {map.panTo( new google.maps.LatLng(latCenter, (longCenter + longOffset)) );}, 100);
+                        setTimeout( function() {map.panTo( new google.maps.LatLng(latCenter, (longCenter - longOffset)) );}, 100);
+
+                        var waitTime = 0;
+                        if ((latLength < .8) && (map.getZoom() < 10)) { setTimeout( function() {map.setZoom(10); }, 900); waitTime = 900;}
+                        if ((latLength < .45) && (map.getZoom() < 11 )) { setTimeout( function() {map.setZoom(11); }, 1300); waitTime = 1300;}
+                        if ((latLength < .35) && (map.getZoom() < 12)) { setTimeout( function() {map.setZoom(12); }, 1700); waitTime = 1700;}
+                        if ((latLength < .15) && (map.getZoom() < 13)) { setTimeout( function() {map.setZoom(13); }, 2100); waitTime = 2100;}
+                        
+                        waitTime += 500;  
+                        setTimeout( function() {slideAction(true);},waitTime);
+                        setTimeout(function () { google.visualization.events.addListener(wrapperOrg, 'ready', onReady);                                       
+                                                wrapperOrg.draw();
+                                                
+                                                
+                          }, (waitTime+500));
+                        setTimeout( function() {globalZoomControl = 1; globalZoomLevel = map.getZoom();}, 3000);
+                        
+                        //OR - could draw on a on full canvas that has been hidden by moving left to 
+                        //  -offthescreen, the animate to visible page range
+                    }
+                 })(senateId,latCenter,longCenter,latLength,longLength,incomeShared, nameIn)
+                ); 
+                
+                //tblname, poly, name, senateIdShared, incomeShared, numOrgs, LatCenter, LongCenter, LatLength
+                
+                google.maps.event.addListener(country, 'mouseover', 
+
+                    (function (senateId,nameIn) {
+                       return function() {
+                            if (this.getVisible()) {
+                                    if (mouseOverCounter!=1) {
+                                        mouseOverCounter = 1;
+                                    } else {
+                                        //reappearPoly();
+                                    }
+                                    var argIn = senateId-1; 
+                                    chartChange(argIn);
+                                    //document.getElementById('p-element-title').innerHTML =nameIn;
+                                    document.getElementById('p-district-name').innerHTML =nameIn;
+                                    //this.setOptions({ visible:false });
+                                    this.setOptions({ fillOpacity:.1 });
+                                    //polyHolder = this;
+                            } else {
+                                //mouseOverCounter = 1;
+                            } 
+                        }
+                    })(senateId,nameIn)
+                );
+
+                google.maps.event.addListener(country, 'mouseout', 
+                       function() { this.setOptions({ fillOpacity:.87 }); }
+                );
+
+                //Invoke command
+                country.setMap(map);
+
+                
+
+        } // end loops over response response data --------------------------------------
+
+    
+    myDataTable.addRow(["MA Median",1238186521,773,2.71]);
+    drawVisualization(myDataTable);
+
+
+    }   //end func drawPoly -----------------------------------------------------------------------------------------------
+
+    function chartChange(rowIn) {
+        
+        var rowHolder = [];
+        rowHolder=[40,40];
+        rowHolder[1]=Number(rowIn);
+        globalView.setRows(rowHolder);
+        
+        globalView.setColumns([0,2]);
+        wrapper.setView(globalView.toJSON());
+        wrapper.draw();
+        
+        globalView.setColumns([0,1]);
+        wrapperTwo.setView(globalView.toJSON());
+        wrapperTwo.draw();
+
+        globalView.setColumns([0,3]);
+        wrapperThree.setView(globalView.toJSON());
+        wrapperThree.draw();
+    }
+
+    function constructNewCoordinates(polygon) {
+        var newCoordinates = [];
+        var coordinates = polygon['coordinates'][0];
+        for (var i in coordinates) {
+            newCoordinates.push(
+            new google.maps.LatLng(coordinates[i][1], coordinates[i][0]));
+        }
+        return newCoordinates;
+    }
+
+    function setStyles(layer) {
+
+        var styles = new Array();
+        styles.push({
+                        markerOptions: {
+                            iconName:'red_circle'
+                            },
+                            
+                        polygonOptions:{
+                            fillColor:'#351c75',                        
+                            fillOpacity: .9
+                            }
+                    });
+        
+        layer.set('styles',styles);
+    }
+
+    function setQueryParams(selectField, tableId, params_pass) {
+
+        layer.setOptions({
+            query: {
+                select: selectField,
+                from: tableId,
+                where: 'tblname = 1'
+                }
+        });  
+    }
+
+    function slideAction(stateArg) {
+
+    if (stateArg) {
+
+        $("#graph-canvas").animate({
+            "left": "-650px"},250);
+
+        $("#left-slider").animate({
+            "left": "0px"
+        }, 500);
+
+    } else {
+
+        $("#left-slider").animate({
+            "left": "-400px"
+        }, 500);
+    
+        $("#graph-canvas").animate({
+            "left": "20px"},500);
+
+    }
+
+    }
+
+    function populateDistrict(argIn,areaDistrict) {
+
+    //alert(areaDistrict);
+    //alert("in pupoulate");
+    //alert("entering");
+    var url = ['https://www.googleapis.com/fusiontables/v1/query?'];
+        url.push('sql=');
+        
+        var query = 'SELECT Name, Latitude, Longitude, senateId, incomeAmount, mnnSectorCode, assetAmount FROM ' +  //'SELECT tblname, poly, incomeShared,name, senateIdShared FROM ' +   
+       '' + //replace with key7
+         ' WHERE senateId=' + argIn + 
+         ' AND incomeAmount > 0 ' +
+         'ORDER BY incomeAmount DESC LIMIT 200'; 
+
+        var encodedQuery = encodeURIComponent(query);
+        url.push(encodedQuery);
+        url.push('&key=');  //replace with key6
+        url.push('&jsonCallback=?');
+    var theUrl = url.join('');
+    
+    /*
+    var jqxr = $.get(theUrl, (function (areaDistrict) { 
+                                return function() { 
+                                    dataHandlerOrg(data,areaDistrict);
+                                    } 
+                                })(areaDistrict) 
+                    );
+    */
+    var jqxr = $.get(theUrl,dataHandlerOrg);
+    }
+
+      function dataHandlerOrg(data) {  
+
+       var orgDataTable = new google.visualization.DataTable();
+        orgDataTable.addColumn('string','name');
+        //orgDataTable.addColumn('number','incomeShared');  
+        orgDataTable.addColumn('number','Youth & Education');       //1
+        orgDataTable.addColumn('number','Human Services');  
+        orgDataTable.addColumn('number','Other');  
+        orgDataTable.addColumn('number','Arts & Culture');  
+        orgDataTable.addColumn('number','Religious Organizations');  //5
+        orgDataTable.addColumn('number','Philanthropy');  
+        orgDataTable.addColumn('number','Housing');  
+        orgDataTable.addColumn('number','Healthcare');  
+        orgDataTable.addColumn('number','NA');  
+        orgDataTable.addColumn('number','Human Rights');            //10
+        orgDataTable.addColumn('number','Environment & Nature');  
+        orgDataTable.addColumn('number','NAN');  
+        
+        wrapperOrg = new google.visualization.ChartWrapper({
+        containerId: 'org-barchart',
+        chartType:  'BarChart',
+        options:{
+                legend:  {position:'right',
+                            alignment:'start',
+                            textStyle:{fontSize:8}
+                            },  //{position:'bottom'},  //'none',
+                title: 'Top 50 Organizations in ' + globalDistrictName + ' by Income 2011',
+                titlePosition: 'out',
+                chartArea:{top:100, height:"50%"},
+                isStacked:true,
+                //"#e06666","#f6b26b","#ffd966","#6fa8dc","#93c47d",
+                /*
+                series:{
+                    0:{color:"#e06666"},1:{color:"#f6b26b"},3:{color:"#000000"},4:{color:"#ffd966"},5:{color:"#6fa8dc"},6:{color:"#93c47d"},
+                    7:{color:"#e06666"},8:{color:"#f6b26b"},9:{color:"#000000"},10:{color:"#ffd966"},11:{color:"#6fa8dc"}
+                }, */
+                //colors: ["#e06666","#f6b26b","#ffd966","#6fa8dc","#93c47d","#e06666","#f6b26b","#ffd966","#6fa8dc","#93c47d","#6fa8dc","#93c47d"],
+                //colors:   ["#007d9f","#44c7f4","#d6df23","#44c7f4","#93c47d","#e06666","#f6b26b","#ffd966","#6fa8dc","#93c47d","#e06666","#f6b26b"],
+                colors:   ["#ffd966","#44c7f4","#BECFCA","#ED6300","#d6df23","#7AF0BF","#AF3ADE","#007d9f","#C24040","#F07AB9","#38B549","#f6b26b"],
+                /*
+                hAxes: [ 
+                {testPosition:'out', title:"jabroni", slantedText:true, logScale:true, viewWindow:{max:1000000000,min:500000},gridlines:{count:5}},
+                {testPosition:'out', title:"bottom o the cup", slantedText:false}
+                ],
+                */
+                
+                hAxis: {testPosition:'out', 
+                        //title:"jabroni", 
+                        slantedText:true, 
+                        logScale:true, viewWindow:{max:2000000000,min:500000},
+                        gridlines:{count:6}
+                        },
+                
+
+                vAxes: [
+                 {
+                    textStyle:{fontSize:8},
+                    slantedText:true
+                    
+                },
+                {
+                    //textStyle:{fontSize:8},
+                    slantedText:true
+                }
+                ]
+                //vAxis:
+                //vAxis:{textPosition:'none'}
+                }
+        });
+    
+        var radiusFactor = 1;
+        var rFactor =  ( (globalIncomeDistrict/globalAreaDistrict) * (1 / Math.pow(10,9) ) );
+        if (rFactor > 3) radiusFactor = (1/2);
+        if (rFactor > 6) radiusFactor = (1/4);
+        if (rFactor > 30) radiusFactor = (1/10);
+        if (rFactor > 60) radiusFactor = (1/15);
+        if (rFactor > 120) radiusFactor = (1/20);
+        if (rFactor > 600) radiusFactor = (1/40);
+        if (rFactor > 1200) radiusFactor = (1/80);
+        if (rFactor > 2000) radiusFactor = (1/100);
+        if (rFactor > 2500) radiusFactor = (1/120);
+        //alert(rFactor);
+
+        globalZoomLevel = Number(map.getZoom());
+        graphColorArray =[];
+
+        
+        var dummyPaths = [];
+        dummyPaths.push(new google.maps.LatLng(40,-40));
+        dummyPaths.push(new google.maps.LatLng(40,-50));
+        dummyPaths.push(new google.maps.LatLng(30,-40));
+        killPoly = new google.maps.Polygon({
+                    paths:  dummyPaths
+                    });
+        
+        /*
+    
+                //Polygon event listeners -------------------------------
+
+                google.maps.event.addListener(country, 'click',
+                (function (senateId,latCenter,longCenter, latLength, longLength,incomeShared, nameIn) {
+                    return function() {
+        */
+
+
+        var rows = data['rows'];
+        //alert(rows);
+        for (var i in rows) {  // loop proc ------------------------------
+
+            //Name,Latitude, Longitude,senateId,incomeAmount, mnnSectorCode
+            var orgIncome = Number(rows[i][4]);
+            var orgName = rows[i][0];
+            var orgSector = Number(rows[i][5]);
+            var orgAssets = Number(rows[i][6]);
+            
+            //add to data org graph
+            //orgDataTable.addRow([orgName,orgIncome,orgAssets]);
+            var dataRow = [];
+            dataRow.push(orgName);
+            for (var j=0; j <12; j++) {
+                if (j == (orgSector-1)) {
+                    dataRow.push(orgIncome);
+                } else {
+                    dataRow.push(0);
+                }
+            }
+            orgDataTable.addRow(dataRow);
+
+            //Org circle attributes
+            var centerHolder =  new google.maps.LatLng( Number( rows[i][1] ), Number( rows[i][2] ) );    
+
+            var radiusHolder = 5.0;
+            var zCalc = 260;
+            if (orgIncome > 0) {
+                radiusHolder = (Math.sqrt(orgIncome)*radiusFactor);  //10*Math.log(orgIncome); //
+                zCalc = 260 - Math.round( (10 * Math.log(orgIncome)) );
+                }
+
+            /* var colorArray = ["#007d9f","#44c7f4","#d6df23","#44c7f4","#93c47d",
+                              "#e06666","#f6b26b","#ffd966","#6fa8dc","#93c47d",
+                              "#e06666","#f6b26b","#ffd966","#6fa8dc","#93c47d"]; */
+
+            var colorArray = ["#ffd966","#44c7f4","#BECFCA",
+							"#ED6300","#d6df23","#7AF0BF",
+							"#AF3ADE","#007d9f","#C24040",
+							"#F07AB9","#38B549","#f6b26b"];
+
+            graphColorArray.push(colorArray[orgSector]);    
+            
+            //Constructor
+            var circle = new google.maps.Circle({
+                                            radius:radiusHolder,
+                                            //map:map,
+                                            center: centerHolder,
+                                            fillOpacity:.65,
+                                            fillColor: colorArray[(orgSector-1)],
+                                            storkeOpacity:'1.0',
+                                            strokeColor:'#000000',
+                                            strokeWeight:1,
+                                            zIndex:zCalc
+                                            });
+                        
+           polyArray.push(circle);
+           
+            google.maps.event.addListener(circle, 'mouseover', 
+                (function (i,orgName,orgIncome, orgAssets) {
+                    return function() {
+                        document.getElementById('p-district-title').innerHTML = orgName;
+
+                        document.getElementById('org-income-var').innerHTML = returnCommas(orgIncome);
+                        document.getElementById('org-assets-var').innerHTML = returnCommas(orgAssets);
+
+                        this.setOptions({fillOpacity:.9});
+
+                        //wrapperOrg.setSelection([{"rows":2,"columns":null}]);
+                        //var selection = wrapperOrg.getSelection();
+                        
+                        //alert("yo");
+                        }
+                })(i,orgName,orgIncome,orgAssets)
+            );
+
+            google.maps.event.addListener(circle, 'mouseout', 
+                (function (i,orgName) {
+                    return function() {
+                        document.getElementById('p-district-title').innerHTML = "ORGANIZATION NAME";
+                        this.setOptions({fillOpacity:.35});
+                        }
+                })(i,orgName)
+            );
+            
+            google.maps.event.addListener(circle, 'click', 
+                ( function (centerHolder) {
+                
+                    return function() {
+                        //alert("you clicked me, fly-into 45 view at zoom > 17");
+
+                        globalZoomControl = 1;
+
+                        var theLat = centerHolder.lat();
+                        var theLong = centerHolder.lng();
+
+                        var initialPoint = new google.maps.LatLng( (theLat-.004),(theLong-.004));
+
+                        map.panTo(initialPoint);
+  
+                        //mapTypeId: google.maps.MapTypeId.SATELLITE  //SATELLITE  //ROADMAP
+                        map.setOptions({mapTypeId:google.maps.MapTypeId.SATELLITE});
+                        
+                        savedDistrictZoom = map.getZoom();
+
+                        var waitTime = 600;
+                        if ( map.getZoom() < 10) { setTimeout( function() {map.setZoom(10); }, waitTime); waitTime += 500;}
+                        if ( map.getZoom() < 11) { setTimeout( function() {map.setZoom(11); }, waitTime); waitTime += 500;}
+                        if ( map.getZoom() < 12) { setTimeout( function() {map.setZoom(12); }, waitTime); waitTime += 500;}
+                        if ( map.getZoom() < 13) { setTimeout( function() {map.setZoom(13); }, waitTime); waitTime += 500;}
+                        if ( map.getZoom() < 14) { setTimeout( function() {map.setZoom(14); }, waitTime); waitTime += 500;}
+                        if ( map.getZoom() < 15) { setTimeout( function() {map.setZoom(15); }, waitTime); waitTime += 500;}
+                        if ( map.getZoom() < 16) { setTimeout( function() {map.setZoom(16); }, waitTime); waitTime += 500;}
+                        if ( map.getZoom() < 17) { setTimeout( function() {map.setZoom(17); }, waitTime); waitTime += 500;}
+                        if ( map.getZoom() < 18) { setTimeout( function() {map.setZoom(18); }, waitTime); waitTime += 500;}
+                        
+                        //map.setZoom(18);
+                        map.setTilt(45);
+
+                        var walkCounter = [1,0];
+                        for (j in walkCounter) {
+                            
+                            setTimeout(  (function (j) {
+                                            return function() {
+                                                map.panTo(new google.maps.LatLng( (theLat - (.002*walkCounter[j])), theLong-.004) ); 
+                                                //alert(j); 
+                                                }
+                                            })(j)
+                                     , (waitTime + 1000 + (500*j)) );                               
+                        }
+
+                        for (j in walkCounter) {
+                            
+                            setTimeout(  (function (j) {
+                                            return function() {
+                                                map.panTo(new google.maps.LatLng( theLat , (theLong - (.002*walkCounter[j]) ) ) ); 
+                                                //alert(j); 
+                                                }
+                                            })(j)
+                                     , (waitTime + 2000 + (500*j)) );                               
+                        }
+
+
+                        var animBounce = google.maps.Animation.BOUNCE;
+                        var animDrop = google.maps.Animation.DROP;
+                        //var iconSymbol = google.maps.SymbolPath.CIRCLE;
+                        // var symbolObj = new google.maps.Symbol({path:iconSymbol});
+                                    
+                        theMarker = new google.maps.Marker({
+                                                //radius:radiusHolder,
+                                                animation:animDrop,
+                                                //map:map,
+                                                icon: {path: google.maps.SymbolPath.CIRCLE,
+                                                        scale:6
+                                                        },
+                                                position: centerHolder
+                                                });
+
+                        setTimeout( function() { theMarker.setMap(map); globalZoomLevel = map.getZoom() - 1;} , (waitTime + 3300));
+                        
+                        globalSetting = 2;
+
+                    }
+                })(centerHolder)
+            );
+            
+            
+            google.maps.event.addListenerOnce(killPoly,'click', 
+                           
+                (function (poly) {
+                    
+                    return function() {  poly.setMap(null);  }
+                    })(circle)
+
+            );    
+                 
+           
+           var finalEvent = rows.length - 1;
+
+           google.maps.event.addListener(map, 'zoom_changed', 
+                
+                (function (poly,i) {
+                    return function() {
+                        
+                        if (globalZoomControl == 1) {
+ 
+                            var deltaZoom = Number( globalZoomLevel - (map.getZoom()) );
+                        
+                            if ( deltaZoom < 0) {    
+                                poly.setRadius( ( (poly.getRadius() / 1.9 ) + 10) );
+                            } else {
+                                poly.setRadius( ( (poly.getRadius() - 10) / (1/1.9))  );   //(1/1.9) ) );
+                            }
+
+                            if (i == finalEvent){ globalZoomLevel = map.getZoom(); }
+
+                        }
+                    }
+                })(circle,i)
+            );
+
+            
+           //Invoke org cirlce
+            circle.setMap(map);
+            
+            
+        } // end loop --------------------------------------------------
+
+        globalSetting = 1;
+        
+        //globalZoomLevel = map.getZoom();
+        //alert(globalZoomLevel);
+        //initialize org graph
+        globalViewOrg = new google.visualization.DataView(orgDataTable);
+        wrapperOrg.setDataTable(orgDataTable);
+        var rowHolder =[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50];
+        globalViewOrg.setRows(rowHolder);
+        /*
+        var rowHolder =[0,1,2,3,4];
+        var graphColorInp = [];
+        for (x in rowHolder) {
+            graphColorInp.push(graphColorArray[x]);
+            }
+        alert(graphColorInp);
+        wrapperOrg.setOptions({colors:graphColorInp});
+        wrapperOrg.setOptions({colors:['#38761d','#6fa8dc','#000000','#000000','#000000']});
+        */
+        wrapperOrg.setView(globalViewOrg.toJSON());
+
+    } // end func populate district ----------------------------------------------------------------------
+
+    function returnCommas(inpString) {
+
+        var incomeString = (inpString+'');
+        var incomeLength = incomeString.length;
+        //alert(incomeLength);
+        var buildString = [''];
+        var commaCounter = 3 - (incomeLength % 3);
+        var startCounter = 0;
+        //alert(commaCounter);
+        for (var x=0; x<incomeLength;x++) {
+            if (commaCounter==3) {
+                commaCounter=0;
+                if (startCounter > 0) buildString.push(',');
+                             
+            } else {
+                                
+            }
+            buildString.push(incomeString[x]);
+            commaCounter += 1;
+            startCounter = 1;
+        }
+        buildString = buildString.join('');
+        buildString = ' $ ' + buildString;
+
+        return buildString
+    }
+
+    function onReady() {
+
+        google.visualization.events.addListener(wrapperOrg.getChart(), 'onmouseover', function (e) { 
+                                                    var theRow = e['row']; //alert(theRow); 
+                                                    var theCol = e['column']; //alert(theCol); 
+                                                    setTimeout( function() {polyArray[theRow].setOptions({fillOpacity:.9});},100);
+                                                    setTimeout( function() {polyArray[theRow].setOptions({fillOpacity:.4});},200);
+                                                    setTimeout( function() {polyArray[theRow].setOptions({fillOpacity:.9});},300);
+                                                    setTimeout( function() {polyArray[theRow].setOptions({fillOpacity:.4});},400);
+                                                    setTimeout( function() {polyArray[theRow].setOptions({fillOpacity:.9});},500);
+                                                    //var item = this.getSelection();
+                                                    //var elem = item[0];
+                                                    //var joe = elem.row;
+                                                    //alert(joe);
+                                                    
+                                                    }
+                                                );
+
+    }
+
+    //Launch initialize function ------------------------------------
+    google.maps.event.addDomListener(window, 'load', initialize);
+
+
+</script>
+</head>
+<body>
+<div id="dashboard-wrapper">
+
+        <div id="left-slider"> 
+            <div id="org-breakout">
+                <div id="district-title"> <p id="p-district-title"> ORGANIZATION NAME </p></div>
+                
+                <div id="org-income">
+                    <div> Income: <span id="org-income-var"> - </span></div>
+                </div>
+                
+                <div id="org-assets">
+                    <div> Assets: <span id="org-assets-var" > - </span></div>
+                </div>
+             </div>
+             <div id="org-wrapper"  style="overflow-y:scroll">
+                   <div id="element-name" style="top:0px;height:20px;">
+                         <div id="p-element-title" style="position:absolute;left:10px; width:100px"> District Name </div> 
+                         <!-- <div id="Div1" style="right:10px; width:100px;"> District Name </div>  -->
+                         <button id="zoomout" style="position:absolute;right:20px; width:100px;height:30px"> Zoom Out </button> 
+                   </div>
+                   <div id="org-barchart" style="top:20px; height:300%;"> </div>
+            </div>
+        </div>
+
+	<div id="controls-wrapper"> 
+
+	</div>
+
+	<div id="map-canvas" style="overflow:hidden"> </div>
+
+    <div id="graph-canvas" > 
+	    
+        <div id ="district-name">
+          <b>  <p id="p-district-name"> District Name </p> </b>
+        </div>
+        
+        <div id="graph1" ></div>
+        <div id="graph2"></div>
+        <div id="graph3"></div>
+ 	</div>
+
+</body>
+</html>
