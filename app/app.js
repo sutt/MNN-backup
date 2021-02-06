@@ -1,12 +1,13 @@
 const express = require('express')
 const handlebars = require('hbs')
-const apiKey = require('./.env.json')
+
+let apiKey = [{key:'NO_KEY'}]
+try {apiKey = require('./.env.json')} catch {}
+const key = process.env.MAPS_KEY || apiKey[0]['key']
 
 const app = express()
 app.set('views', './app/views/')
 app.set('view engine', 'hbs')
-
-const key = process.env.MAPS_KEY || apiKey[0]['key']
 
 app.get('/', (req, res) => {
     res.render('index',{key: key} )
