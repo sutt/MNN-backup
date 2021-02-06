@@ -8,6 +8,7 @@ const key = process.env.MAPS_KEY || apiKey[0]['key']
 const app = express()
 
 app.use('/js', express.static('./app/js'));
+app.use('/data', express.static('./app/data'));
 app.set('views', './app/views/')
 app.set('view engine', 'hbs')
 

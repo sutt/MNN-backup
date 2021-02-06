@@ -82,7 +82,7 @@
         layer.setMap(map);
 
         //Build Districts Polygons -----------------------------------------------
-        /*
+        
         var script = document.createElement('script');
         var url = ['https://www.googleapis.com/fusiontables/v1/query?'];
         url.push('sql=');
@@ -99,10 +99,6 @@
         script.src = url.join('');
         var body = document.getElementsByTagName('body')[0];
         body.appendChild(script);
-        */
-        fetch('/data/rows-4.json')
-            .then(res => res.json())
-            .then(data => drawPoly(data))
 
         //this calls back drawPoly - districts poly: create, invoke ; districts-graph-data: build
         //which then calls drawVisualization - build graphs
@@ -272,6 +268,7 @@
         
         var rows = data['rows'];
         for (var i in rows) {   // loop proc -------------------------------------
+                /*
                 var newCoordinates = [];
                 var geometries = rows[i][1]['geometries'];             
                 if (geometries) {
@@ -281,7 +278,7 @@
                 } else {
                     newCoordinates = constructNewCoordinates(rows[i][1]['geometry']); 
                 }
-                
+                */
                 //Pre-Proc data fields for Polygon's attributes
 
                //build local vars
@@ -309,7 +306,7 @@
                 var colorTier = 0;
                 if(incomeShared > 1318815734) colorTier = 1;
                 if(incomeShared > 16066464721) colorTier = 2;
-                
+                /*
                 //Construct Object ---------------------------------
                 var country = new google.maps.Polygon({
                     paths: newCoordinates,
@@ -397,7 +394,7 @@
 
                 //Invoke command
                 country.setMap(map);
-
+                */
                 
 
         } // end loops over response response data --------------------------------------
