@@ -492,10 +492,18 @@
     }
 
     function populateDistrict(argIn,areaDistrict) {
+        
+        console.log(argIn)
+        var url = `/data/district-${argIn}.json`
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => dataHandlerOrg(data))
 
     //alert(areaDistrict);
     //alert("in pupoulate");
     //alert("entering");
+    /*
     var url = ['https://www.googleapis.com/fusiontables/v1/query?'];
         url.push('sql=');
         
@@ -511,7 +519,7 @@
         url.push('&key=AIzaSyBdofuOum7_G8n9-X2TqsoC0oU7xt7b1gY');
         url.push('&jsonCallback=?');
     var theUrl = url.join('');
-    
+    */
     /*
     var jqxr = $.get(theUrl, (function (areaDistrict) { 
                                 return function() { 
@@ -520,7 +528,7 @@
                                 })(areaDistrict) 
                     );
     */
-    var jqxr = $.get(theUrl,dataHandlerOrg);
+    // var jqxr = $.get(theUrl,dataHandlerOrg);
     }
 
       function dataHandlerOrg(data) {  
