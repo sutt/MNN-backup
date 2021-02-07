@@ -1,5 +1,8 @@
 **Backup files from 2013 Citizen Data Science project for Massachusetts Non-Profit Network**
 
+Map Deployed with reduced functionality here:
+[https://mnn-map.herokuapp.com](https://mnn-map.herokuapp.com)
+
 *Authors:*
 Will Sutton, Erick Olson
 
